@@ -19,6 +19,13 @@ variable "tags" {
   default     = {}
 }
 
+variable "container_job_env" {
+  description = "Container environment variables, which are defined as `secrets` within the container job configuration. This is to help reduce the risk of accidentally exposing secrets."
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
 variable "existing_resource_group" {
   description = "Conditionally launch resources into an existing resource group. Specifying this will NOT create a resource group."
   type        = string
