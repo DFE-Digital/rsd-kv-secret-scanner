@@ -19,11 +19,16 @@ variable "tags" {
   default     = {}
 }
 
-variable "container_job_env" {
-  description = "Container environment variables, which are defined as `secrets` within the container job configuration. This is to help reduce the risk of accidentally exposing secrets."
+variable "function_app_settings" {
+  description = ""
   type        = map(string)
   default     = {}
-  sensitive   = true
+}
+
+variable "function_app_node_version" {
+  description = "Which version of Node JS to run the Function on"
+  type        = number
+  default     = 18
 }
 
 variable "existing_resource_group" {
