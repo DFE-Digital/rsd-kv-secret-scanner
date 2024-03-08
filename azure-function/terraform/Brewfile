@@ -1,0 +1,7 @@
+brew "tfenv"
+brew "terraform-docs"
+brew "tfsec"
+brew "az"
+brew "coreutils"
+brew "jq"
+brew "tflint"
