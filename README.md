@@ -37,7 +37,7 @@ Service Principals:
 
 Each of the SP has the relevant role assigned to it
 
-The script held in the root of the repo (`kv-secret-scan.sh`) is executed
+The script held in the `bash` directory of the repo (`kv-secret-scan.sh`) is executed
 against each subscription on a nightly basis using a Cron triggered GitHub Action.
 
-The three workflows are staggered to avoid rate limiting.
+The three workflows should be staggered to avoid rate limiting.
