@@ -7,7 +7,7 @@ const { SecretClient } = require("@azure/keyvault-secrets");
 const { setLogLevel } = require("@azure/logger");
 const { SubscriptionClient } = require("@azure/arm-subscriptions");
 
-const environment = process.env.NODE_ENV
+const environment = process.env["APPSETTING_NODE_ENV"] || process.env["NODE_ENV"];
 
 // Set logging level to "warning" for Prod, or "info" for Dev
 const logLevel = environment && environment === "production" ? "error" : "warning"
