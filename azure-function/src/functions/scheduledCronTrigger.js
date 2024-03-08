@@ -1,7 +1,6 @@
 require("dotenv/config");
 const { IncomingWebhook } = require('@slack/webhook');
-const { PlainTextElement, MrkdwnElement } = require('@slack/types');
-const { DefaultAzureCredential } = require("@azure/identity");
+const { DefaultAzureCredential, ManagedIdentityCredential, ChainedTokenCredential } = require("@azure/identity");
 const { app } = require('@azure/functions');
 const { KeyVaultManagementClient } = require("@azure/arm-keyvault")
 const { SecretClient } = require("@azure/keyvault-secrets");
@@ -19,6 +18,7 @@ setLogLevel(logLevel)
 // const azure_tenantId = process.env["AZURE_TENANT_ID"];
 // const azure_clientId = process.env["AZURE_CLIENT_ID"];
 // const azure_secret = process.env["AZURE_CLIENT_SECRET"];
+const azure_uami_clientId = process.env["AZURE_UAMI_CLIENT_ID"];
 const azure_subscription = process.env["AZURE_SUBSCRIPTION"];
 const slack_webhook_url = process.env["SLACK_WEBHOOK_URL"];
 
@@ -32,7 +32,15 @@ const credentials = getCredentials()
  */
 function getCredentials() {
   try {
-    return new DefaultAzureCredential()
+    let uamiCredentials = null
+    if (environment == "production" && azure_uami_clientId) {
+      uamiCredentials = new ManagedIdentityCredential(azure_uami_clientId)
+    }
+
+    return new ChainedTokenCredential(
+      uamiCredentials,
+      DefaultAzureCredential()
+    )
   } catch (err) {
     if (err.name == "RestError" && err.statusCode == 403) {
       console.error(err.details.error.innerError)
