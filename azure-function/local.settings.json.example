@@ -7,7 +7,10 @@
     "AZURE_SUBSCRIPTION": null,
     "AZURE_TENANT_ID": null,
     "AZURE_CLIENT_ID": null,
+    "AZURE_USE_UAMI": false,
     "AZURE_CLIENT_SECRET": null,
-    "SLACK_WEBHOOK_URL": null
+    "SLACK_WEBHOOK_URL": null,
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": "",
+    "NODE_ENV": "development"
   }
 }

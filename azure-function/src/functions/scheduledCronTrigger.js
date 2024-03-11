@@ -1,53 +1,98 @@
 require("dotenv/config");
 const { IncomingWebhook } = require('@slack/webhook');
-const { DefaultAzureCredential, ManagedIdentityCredential, ChainedTokenCredential } = require("@azure/identity");
-const { app } = require('@azure/functions');
+const { ManagedIdentityCredential, AzureCliCredential, ClientSecretCredential, AzureDeveloperCliCredential, DefaultAzureCredential } = require("@azure/identity");
+const { app, HttpRequest } = require('@azure/functions');
 const { KeyVaultManagementClient } = require("@azure/arm-keyvault")
 const { SecretClient } = require("@azure/keyvault-secrets");
 const { setLogLevel } = require("@azure/logger");
 const { SubscriptionClient } = require("@azure/arm-subscriptions");
 
 const environment = process.env["APPSETTING_NODE_ENV"] || process.env["NODE_ENV"];
+console.log("Node Environment set to", environment)
 
 // Set logging level to "warning" for Prod, or "info" for Dev
-const logLevel = environment && environment === "production" ? "error" : "warning"
+const logLevel = environment && environment === "production" ? "error" : "info"
 console.info("Setting Log Level to", logLevel)
 setLogLevel(logLevel)
 
 // These are environment variables that should be passed to the Azure function
-// const azure_tenantId = process.env["AZURE_TENANT_ID"];
-// const azure_clientId = process.env["AZURE_CLIENT_ID"];
-// const azure_secret = process.env["AZURE_CLIENT_SECRET"];
-const azure_uami_clientId = process.env["AZURE_UAMI_CLIENT_ID"];
+const azure_tenantId = process.env["AZURE_TENANT_ID"];
+const azure_clientId = process.env["AZURE_CLIENT_ID"];
+const azure_secret = process.env["AZURE_CLIENT_SECRET"];
+const azure_uami = process.env["AZURE_USE_UAMI"];
 const azure_subscription = process.env["AZURE_SUBSCRIPTION"];
 const slack_webhook_url = process.env["SLACK_WEBHOOK_URL"];
 
 let today = new Date()
 
-const credentials = getCredentials()
+let credentials
+
+/**
+ * Initialise the authentication handler and begin
+ * @returns void
+ */
+function init(request, context) {
+  /**
+   * Make Context available to all
+   */
+  process.context = context
+
+  /**
+   * Determine if the authentication was successful
+   */
+  credentials = getCredentials(context)
+
+  /**
+   * If credentials is not null, then we can try to grab a Bearer token
+   */
+  if (credentials) {
+    context.log("Testing credentials by acquiring a token...")
+
+    credentials.getToken().then((token) => {
+      context.log("Successfully acquired token")
+      start()
+    }, (CredentialUnavailableError) => {
+      context.error("Failed to acquire a token", CredentialUnavailableError)
+    })
+  }
+}
 
 /**
  * Load an appropriate set of credentials
  * @returns DefaultAzureCredential
  */
 function getCredentials() {
+  let credential = null
+
   try {
-    let uamiCredentials = null
-    if (environment == "production" && azure_uami_clientId) {
-      uamiCredentials = new ManagedIdentityCredential(azure_uami_clientId)
+    if (azure_uami && azure_clientId) {
+      process.context.log("Loaded UAMI Client ID from Environment", azure_clientId)
+      credential = new ManagedIdentityCredential({
+        managedIdentityClientId: azure_clientId
+      })
+      return credential
     }
 
-    return new ChainedTokenCredential(
-      uamiCredentials,
-      DefaultAzureCredential()
-    )
-  } catch (err) {
-    if (err.name == "RestError" && err.statusCode == 403) {
-      console.error(err.details.error.innerError)
-    } else {
-      console.error(err);
+    if (azure_tenantId, azure_clientId, azure_secret) {
+      process.context.log("Loaded Service Principal from Environment", azure_clientId)
+      credential = new ClientSecretCredential(azure_tenantId, azure_clientId, azure_secret)
+      return credential
     }
+
+    if (environment == "development") {
+      process.context.log("Trying development credentials")
+      credential = new AzureDeveloperCliCredential()
+      return credential
+    }
+
+    process.context.log("Trying fallback credentials")
+    credential = new DefaultAzureCredential()
+    return credential
+  } catch (err) {
+    process.context.error("An error occurred handling the credentials", err)
     return null
+  } finally {
+    process.context.log("Settled on using", credential)
   }
 }
 
@@ -63,7 +108,7 @@ async function getSubscriptions() {
     const client = new SubscriptionClient(credentials);
 
     if (azure_subscription && null !== azure_subscription) {
-      console.log("Loaded Subscription from Environment", azure_subscription)
+      process.context.log("Loaded Subscription from Environment", azure_subscription)
       subscriptionsIds.push(await collect(client, azure_subscription))
     } else {
       for await (const item of client.subscriptions.list()) {
@@ -82,12 +127,11 @@ async function getSubscriptions() {
         return { "subscriptionId": subscriptionId, "subscriptionName": displayName }
       }
     }
-  } catch (err) {
-    if (err.name == "RestError" && err.statusCode == 403) {
-      console.error(err.details.error.innerError)
-    } else {
-      console.error(err);
-    }
+  } catch (RestError) {
+    const err = JSON.parse(RestError.message).error
+    const status = RestError.statusCode
+
+    process.context.error("HTTP " + status, err.code, err.message)
   }
 
   return subscriptionsIds
@@ -122,9 +166,9 @@ async function getKeyVaults(subscription) {
     }
   } catch (err) {
     if (err.name == "RestError" && err.statusCode == 403) {
-      console.error(err.details.error.innerError)
+      process.context.error(err.details.error.innerError)
     } else {
-      console.error(err);
+      process.context.error(err);
     }
   }
 
@@ -174,7 +218,7 @@ async function getKeyVaultSecrets(keyVault) {
       }
     }
   } catch (err) {
-    console.error(err);
+    process.context.error(err);
   }
 
   return secrets
@@ -190,7 +234,7 @@ function notifyOnExpiry(subscriptions) {
   for (const subscription of subscriptions) {
     const { subscriptionId, subscriptionName, keyVaults } = subscription
 
-    console.log("Processing Subscription", subscriptionName)
+    process.context.log("Processing Subscription", subscriptionName)
 
     blocks.push({
       type: "header",
@@ -211,10 +255,10 @@ function notifyOnExpiry(subscriptions) {
     for (const keyVault of keyVaults) {
       const { keyVaultName, keyVaultSecrets } = keyVault
 
-      console.log("Processing Key Vault", keyVaultName)
+      process.context.log("Processing Key Vault", keyVaultName)
 
       if (keyVaultSecrets.length == 0) {
-        console.log("No secrets found for this Key Vault");
+        process.context.log("No secrets found for this Key Vault");
       } else {
         blocks.push({
           type: "section",
@@ -247,7 +291,7 @@ function notifyOnExpiry(subscriptions) {
               break;
           }
 
-          console.log(message)
+          process.context.log(message)
 
           childblocks.push({
             text: secretName,
@@ -270,7 +314,7 @@ function notifyOnExpiry(subscriptions) {
   }
 
   if (null !== slack_webhook_url) {
-    console.log("Loaded Slack Webhook URL from Environment");
+    process.context.log("Loaded Slack Webhook URL from Environment");
     const webhook = new IncomingWebhook(slack_webhook_url)
 
     blocks.push({
@@ -294,6 +338,8 @@ function notifyOnExpiry(subscriptions) {
 }
 
 async function start() {
+  process.context.log("===== Beginning execution =====")
+
   /**
    * Query the authenticated user's identity for all available Subscriptions
    */
@@ -302,26 +348,32 @@ async function start() {
   /**
    * For each Subscription, Get a list of Key Vault IDs
    */
-  for (let subscription of subscriptions) {
-    const keyVaults = await getKeyVaults(subscription)
+  if (subscriptions.length) {
+    for (let subscription of subscriptions) {
+      const keyVaults = await getKeyVaults(subscription)
 
-    subscription.keyVaults = keyVaults
+      subscription.keyVaults = keyVaults
+
+      /**
+       * Once we have a list of Key Vaults for each Subscription
+       * then we can iterate through each one and query all of the Secrets
+       */
+      if (subscription.keyVaults.length) {
+        for (let keyVault of subscription.keyVaults) {
+          const keyVaultSecrets = await getKeyVaultSecrets(keyVault)
+
+          keyVault.keyVaultSecrets = keyVaultSecrets
+        }
+      }
+    }
 
     /**
-     * Once we have a list of Key Vaults for each Subscription
-     * then we can iterate through each one and query all of the Secrets
+     * Check each Secret and output a message based on the state of the expiry
      */
-    for (let keyVault of subscription.keyVaults) {
-      const keyVaultSecrets = await getKeyVaultSecrets(keyVault)
-
-      keyVault.keyVaultSecrets = keyVaultSecrets
-    }
+    notifyOnExpiry(subscriptions)
+  } else {
+    process.context.error("No Subscriptions were loaded")
   }
-
-  /**
-   * Check each Secret and output a message based on the state of the expiry
-   */
-  notifyOnExpiry(subscriptions)
 }
 
 /**
@@ -329,10 +381,9 @@ async function start() {
  */
 app.timer('scheduledCronTrigger', {
   schedule: '0 0 3 * * *',
-  handler: start
+  handler: init
 });
 
-/**
- * Start the script
- */
-start()
+app.get('start', {
+  handler: init
+})
