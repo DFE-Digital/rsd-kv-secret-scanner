@@ -23,6 +23,7 @@ variable "function_app_settings" {
   description = ""
   type        = map(string)
   default     = {}
+  sensitive   = true
 }
 
 variable "function_app_node_version" {
