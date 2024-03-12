@@ -67,9 +67,7 @@ function getCredentials() {
   try {
     if (azure_uami && azure_clientId) {
       process.context.log("Loaded UAMI Client ID from Environment", azure_clientId)
-      credential = new ManagedIdentityCredential({
-        managedIdentityClientId: azure_clientId
-      })
+      credential = new ManagedIdentityCredential(azure_clientId)
       return credential
     }
 
