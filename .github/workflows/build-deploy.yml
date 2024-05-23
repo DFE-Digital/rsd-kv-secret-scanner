@@ -95,6 +95,6 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
-            az container restart \
+            az container start \
               --name ${{ secrets.CONTAINER_NAME }} \
               --resource-group ${{ secrets.RESOURCE_GROUP }}
