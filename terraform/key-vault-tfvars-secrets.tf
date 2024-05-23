@@ -2,7 +2,7 @@ module "azurerm_key_vault" {
   source = "github.com/DFE-Digital/terraform-azurerm-key-vault-tfvars?ref=v0.4.1"
 
   environment                             = local.environment
-  project_name                            = "afdcdv"
+  project_name                            = "kvss"
   existing_resource_group                 = azurerm_resource_group.default.name
   azure_location                          = local.region
   key_vault_access_use_rbac_authorization = true
@@ -12,4 +12,6 @@ module "azurerm_key_vault" {
   enable_diagnostic_setting               = false
   enable_diagnostic_storage_account       = false
   tags                                    = local.tags
+
+  depends_on = [azurerm_resource_group.default]
 }

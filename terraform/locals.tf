@@ -6,7 +6,7 @@ locals {
   registry_server                    = var.registry_server
   registry_username                  = var.registry_username
   registry_password                  = var.registry_password
-  registry_image_name                = "rsd-kv-secret-scanner"
+  registry_image_name                = "dfe-digital/rsd-kv-secret-scanner"
   registry_image_tag                 = "latest"
   job_cpu                            = 0.5
   job_memory                         = 1
