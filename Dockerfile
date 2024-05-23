@@ -3,8 +3,8 @@ LABEL org.opencontainers.image.source=https://github.com/DFE-Digital/rsd-kv-secr
 
 RUN apk add curl
 
-COPY kv-secretn-scan.sh /
-RUN chmod +x /kv-secretn-scan.sh
+COPY kv-secret-scan.sh /
+RUN chmod +x /kv-secret-scan.sh
 
 COPY docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
