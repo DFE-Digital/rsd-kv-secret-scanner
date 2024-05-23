@@ -2,8 +2,8 @@
 set -e
 
 TZ=Europe/London
-TODAY=$(gdate -Idate)
-DATE_90=$(gdate --date="90 days ago" +"%Y-%m-%d")
+TODAY=$(date -Idate)
+DATE_90=$(date --date="90 days ago" +"%Y-%m-%d")
 SILENT=0
 
 NOTIFY=1
