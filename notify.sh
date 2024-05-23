@@ -86,11 +86,10 @@ if [ $MORE_FIELDS == 1 ]; then
 
   if [ "$BODY" != "" ]; then
     mv final.json tmp.final.json
-    cat tmp.final.json |
     jq \
       --argjson fields "$BODY" \
       '.attachments[0].blocks[2].fields = $fields |
-      .attachments[0].blocks[2].type = "section"' > final.json
+      .attachments[0].blocks[2].type = "section"' tmp.final.json > final.json
   fi
 fi
 
