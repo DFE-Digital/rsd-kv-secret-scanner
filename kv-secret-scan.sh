@@ -16,7 +16,7 @@ fi
 # Author:
 #   Ash Davies <@DrizzlyOwl>
 # Version:
-#   0.1.0
+#   0.1.1
 # Description:
 #   Search an Azure Subscription for Azure Key Vaults that have Secrets with
 #   expiry dates. If an expiry date is due within the next 90 days report it
@@ -78,6 +78,16 @@ if [ -z "${AZ_SUBSCRIPTION_SCOPE}" ]; then
   fi
 fi
 
+if [ $NOTIFY == 1 ]; then
+  bash ./notify.sh \
+    -t "🎯 *Scheduled task started in \`$AZ_SUBSCRIPTION_SCOPE\`*" \
+    -l ":key: Key Vault Secret Scanner" \
+    -d "_All Key Vaults within the Azure Subscription will have their secret expiry dates checked. Any secrets with expiry dates in the next 90 days will be noted_"
+
+  bash ./notify.sh \
+    -t "🔎 Looking for Azure Key Vaults..."
+fi
+
 echo "🎯 Using subscription $AZ_SUBSCRIPTION_SCOPE"
 echo
 
@@ -91,8 +101,6 @@ KV_LIST=$(
   jq -rc '.[] | { "name": .name, "resourceGroup": .resourceGroup }'
 )
 
-STATUS=0
-
 for KEY_VAULT in $KV_LIST; do
   BIN_EXPIRED=""
   BIN_EXPIRING=""
@@ -103,6 +111,11 @@ for KEY_VAULT in $KV_LIST; do
     echo "  🔐 Azure Key Vault found..."
   else
     echo "  🔐 Azure Key Vault $KV_NAME in Resource Group $RESOURCE_GROUP..."
+  fi
+
+  if [ $NOTIFY == 1 ]; then
+    bash ./notify.sh \
+      -t "🔐 Azure Key Vault \`$KV_NAME\` in Resource Group \`$RESOURCE_GROUP\`..."
   fi
 
   echo "    🕵️ 🔎  Looking for Secrets..."
@@ -118,6 +131,11 @@ for KEY_VAULT in $KV_LIST; do
 
   if [ -z "$SECRETS" ]; then
     echo "      ✅  No Secrets found!"
+
+    if [ $NOTIFY == 1 ]; then
+      bash ./notify.sh \
+        -t "  ✅ No secrets stored in this Key Vault. Skipping..."
+    fi
   else
     for SECRET in $(echo "$SECRETS" | jq -c); do
       SECRET_NAME=$(echo "$SECRET" | jq -rc '.secret_name')
@@ -164,8 +182,6 @@ for KEY_VAULT in $KV_LIST; do
         -d "*Key Vault:* $KV_NAME    *Resource Group:* $RESOURCE_GROUP"
     fi
   else
-    STATUS=1
-
     if [ "$BIN_EXPIRING" != "" ]; then
       BIN_EXPIRING="[${BIN_EXPIRING/%, /}]"
 
@@ -281,4 +297,7 @@ for KEY_VAULT in $KV_LIST; do
   fi
 done
 
-exit $STATUS
+if [ $NOTIFY == 1 ]; then
+  bash ./notify.sh \
+    -t "Finished"
+fi
