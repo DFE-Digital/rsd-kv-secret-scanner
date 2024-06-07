@@ -41,10 +41,8 @@ resource "azurerm_container_group" "default" {
   }
 
   image_registry_credential {
-    server   = local.registry_server
-    username = local.registry_username
-    password = local.registry_password
-    # user_assigned_identity_id = azurerm_user_assigned_identity.default.id
+    server                    = local.registry_server
+    user_assigned_identity_id = azurerm_user_assigned_identity.default.id
   }
 
   identity {
@@ -76,9 +74,7 @@ resource "azapi_update_resource" "patch_logs" {
       imageRegistryCredentials : [
         {
           "server" : local.registry_server,
-          # "user_assigned_identity_id" : azurerm_user_assigned_identity.default.id,
-          "username" : local.registry_username,
-          "password" : local.registry_password
+          "user_assigned_identity_id" : azurerm_user_assigned_identity.default.id,
         }
       ]
     }
