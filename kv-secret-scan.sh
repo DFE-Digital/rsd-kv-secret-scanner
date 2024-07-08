@@ -16,7 +16,7 @@ fi
 # Author:
 #   Ash Davies <@DrizzlyOwl>
 # Version:
-#   0.1.1
+#   0.2.0
 # Description:
 #   Search an Azure Subscription for Azure Key Vaults that have Secrets with
 #   expiry dates. If an expiry date is due within the next 90 days report it
@@ -42,6 +42,54 @@ while getopts "s:q" opt; do
   esac
 done
 
+# Set up a handy log output function
+#
+# @usage print -l 'Something happened :)'"
+# @param -l <log>  Any information to output
+# @param -e <0/1>  Message is an error
+# @param -q <0/1>  Quiet mode
+function print {
+  OPTIND=1
+  QUIET_MODE=0
+  ERROR=0
+  while getopts "l:q:e:" opt; do
+    case $opt in
+      l)
+        LOG="$OPTARG"
+        ;;
+      q)
+        QUIET_MODE="$OPTARG"
+        ;;
+      e)
+        ERROR="$OPTARG"
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+  done
+
+  if [ "$QUIET_MODE" == "0" ]; then
+    if [ "$ERROR" == "1" ]; then
+      echo "[!] $LOG" >&2
+    else
+      echo "$LOG"
+    fi
+  fi
+}
+
+# Entered a dead-end without user input
+if [ $SILENT == 1 ] && [ -z "${AZ_SUBSCRIPTION_SCOPE}" ]; then
+  print -l "You must specify the Subscription ID or Name when using the silent switch" -e 1 -q 0
+
+  if [ $NOTIFY == 1 ]; then
+    bash ./notify.sh \
+      -t "Error: Silent switch is used but no Subscription scope was specified. Unable to continue"
+  fi
+
+  exit 1
+fi
+
 # If a subscription scope has not been defined on the command line using '-e'
 # then prompt the user to select a subscription from the account
 if [ -z "${AZ_SUBSCRIPTION_SCOPE}" ]; then
@@ -50,7 +98,7 @@ if [ -z "${AZ_SUBSCRIPTION_SCOPE}" ]; then
     jq -c '[.[] | select(.state == "Enabled").name]'
   )
 
-  echo "🌐 Choose an option"
+  print -l "Choose an option: " -e 0 -q 0
   AZ_SUBSCRIPTIONS="$(echo "$AZ_SUBSCRIPTIONS" | jq -r '. | join(",")')"
 
   # Read from the list of available subscriptions and prompt them to the user
@@ -80,18 +128,10 @@ fi
 
 if [ $NOTIFY == 1 ]; then
   bash ./notify.sh \
-    -t "🎯 *Scheduled task started in \`$AZ_SUBSCRIPTION_SCOPE\`*" \
-    -l ":key: Key Vault Secret Scanner" \
-    -d "_All Key Vaults within the Azure Subscription will have their secret expiry dates checked. Any secrets with expiry dates in the next 90 days will be noted_"
-
-  bash ./notify.sh \
-    -t "🔎 Looking for Azure Key Vaults..."
+    -t "🎯 *Key Vault Secret Expiry Scan task started in \`$AZ_SUBSCRIPTION_SCOPE\`*"
 fi
 
-echo "🎯 Using subscription $AZ_SUBSCRIPTION_SCOPE"
-echo
-
-echo "🔎 Looking for Azure Key Vaults..."
+print -l "Subscription: $AZ_SUBSCRIPTION_SCOPE" -q 0 -e 0
 
 # Find all Azure Key Vaults within the specified subscription
 KV_LIST=$(
@@ -101,24 +141,19 @@ KV_LIST=$(
   jq -rc '.[] | { "name": .name, "resourceGroup": .resourceGroup }'
 )
 
+COUNT_KEY_VAULT=0
+TOTAL_SECRET_COUNT=0
+TOTAL_EXPIRING_COUNT=0
+TOTAL_EXPIRED_COUNT=0
+
 for KEY_VAULT in $KV_LIST; do
+  COUNT_KEY_VAULT=$((COUNT_KEY_VAULT+1))
   BIN_EXPIRED=""
   BIN_EXPIRING=""
-  RESOURCE_GROUP=$(echo "$KEY_VAULT" | jq -rc '.resourceGroup')
+  BIN_VALID=""
   KV_NAME=$(echo "$KEY_VAULT" | jq -rc '.name')
 
-  if [ $SILENT == 1 ]; then
-    echo "  🔐 Azure Key Vault found..."
-  else
-    echo "  🔐 Azure Key Vault $KV_NAME in Resource Group $RESOURCE_GROUP..."
-  fi
-
-  if [ $NOTIFY == 1 ]; then
-    bash ./notify.sh \
-      -t "🔐 Azure Key Vault \`$KV_NAME\` in Resource Group \`$RESOURCE_GROUP\`..."
-  fi
-
-  echo "    🕵️ 🔎  Looking for Secrets..."
+  print -l "Azure Key Vault: $KV_NAME" -q 0 -e 0
 
   SECRETS=$(
     az keyvault secret list \
@@ -130,22 +165,12 @@ for KEY_VAULT in $KV_LIST; do
   )
 
   if [ -z "$SECRETS" ]; then
-    echo "      ✅  No Secrets found!"
-
-    if [ $NOTIFY == 1 ]; then
-      bash ./notify.sh \
-        -t "  ✅ No secrets stored in this Key Vault. Skipping..."
-    fi
+    print -l "No secrets with expiry dates found" -q $SILENT -e 0
+    continue
   else
     for SECRET in $(echo "$SECRETS" | jq -c); do
       SECRET_NAME=$(echo "$SECRET" | jq -rc '.secret_name')
       SECRET_EXPIRY=$(echo "$SECRET" | jq -rc '.expiry_date')
-
-      if [ $SILENT == 1 ]; then
-        echo "      🔑  Checking Secret..."
-      else
-        echo "      🔑  Checking Secret: $SECRET_NAME..."
-      fi
 
       # Check expiry of existing token
       SECRET_EXPIRY_EXPIRY_DATE=${SECRET_EXPIRY:0:10}
@@ -154,150 +179,56 @@ for KEY_VAULT in $KV_LIST; do
       DATE_90_COMP=${DATE_90//-/}
       TODAY_COMP=${TODAY//-/}
 
-      if [ $SILENT == 0 ]; then
-        echo "          Expires on $SECRET_EXPIRY_EXPIRY_DATE"
-      fi
-
       if [[ "$SECRET_EXPIRY_EXPIRY_DATE_COMP" -lt "$TODAY_COMP" ]] || [[ "$SECRET_EXPIRY_EXPIRY_DATE_COMP" == "$TODAY_COMP" ]]; then
-        echo "          ❌  Expired"
+        SECRET_STATUS="Expired"
         BIN_EXPIRED="$SECRET, $BIN_EXPIRED"
       elif [[ "$SECRET_EXPIRY_EXPIRY_DATE_COMP" -lt "$DATE_90_COMP" ]]; then
-        echo "          ⏳  Expiring in less than 90 days"
+        SECRET_STATUS="Expiring soon"
         BIN_EXPIRING="$SECRET, $BIN_EXPIRING"
       else
-        echo "          ✅  Still valid"
+        SECRET_STATUS="Valid"
+        BIN_VALID="$SECRET, $BIN_VALID"
       fi
-      echo
+
+      print -l "Secret: $SECRET_NAME | Expiry Date: $SECRET_EXPIRY_EXPIRY_DATE | State: $SECRET_STATUS" -q $SILENT -e 0
+
+      if [ "$SECRET_STATUS" != "Valid" ] && [ $NOTIFY == 1 ]; then
+        bash ./notify.sh \
+          -t ":warning: *Key Vault:* $KV_NAME | *Secret:* <https://portal.azure.com/?feature.msaljs=true#@platform.education.gov.uk/asset/Microsoft_Azure_KeyVault/Secret/https://$KV_NAME.vault.azure.net/secrets/$SECRET_NAME|$SECRET_NAME> | *Expiry Date:* $SECRET_EXPIRY_EXPIRY_DATE"
+      fi
+
+      TOTAL_SECRET_COUNT=$((TOTAL_SECRET_COUNT+1))
     done
   fi
 
   if [ "$BIN_EXPIRING" == "" ] && [ "$BIN_EXPIRED" == "" ]; then
-    if [ $NOTIFY == 1 ]; then
-      BODY=""
-      export BODY
-      bash ./notify.sh \
-        -t "Key Vault Scan finished for $KV_NAME" \
-        -l "✅ No Secrets were found with expiry dates less than 90 days away" \
-        -c "#50C878" \
-        -d "*Key Vault:* $KV_NAME    *Resource Group:* $RESOURCE_GROUP"
-    fi
+    print -l "Secrets are still valid" -q $SILENT -e 0
   else
     if [ "$BIN_EXPIRING" != "" ]; then
       BIN_EXPIRING="[${BIN_EXPIRING/%, /}]"
+      BIN_EXPIRING_COUNT=$(echo "$BIN_EXPIRING" | jq -r 'length')
+      BIN_EXPIRING_SECRET_NAMES=$(echo "$BIN_EXPIRING" | jq -rc '.[].secret_name')
+      TOTAL_EXPIRING_COUNT=$((TOTAL_EXPIRING_COUNT + BIN_EXPIRING_COUNT))
 
-      echo
-      echo "⚠️ Secrets were found that are close to expiry, you should renew them"
-
-      if [ $SILENT == 0 ]; then
-        echo "Key Vault: $KV_NAME"
-        echo "$BIN_EXPIRING" | jq -c '.[].secret_name'
-      fi
-
-      echo
-
-      if [ $NOTIFY == 1 ]; then
-        JSON_SECRETS=$(
-          echo "$BIN_EXPIRING" |
-          jq -r \
-            --arg kvn "${KV_NAME}" \
-            '.[] | [
-              {
-                text: (.secret_name | "<https://portal.azure.com/?feature.msaljs=true#@platform.education.gov.uk/asset/Microsoft_Azure_KeyVault/Secret/https://"+$kvn+".vault.azure.net/secrets/"+.+"|"+.+">"),
-                type: "mrkdwn"
-              },
-              {
-                text: .expiry_date,
-                type: "plain_text"
-              }
-            ]'
-        )
-
-        BODY=$(
-          jq -n \
-            --arg kvn "$KV_NAME" \
-            --arg rg "$RESOURCE_GROUP" \
-            --argjson secrets "$JSON_SECRETS" \
-            '[
-              {
-                text: "*Secret Name*",
-                type: "mrkdwn"
-              },
-              {
-                text: "*Expiry Date*",
-                type: "mrkdwn"
-              }
-            ] | . += $secrets'
-        )
-
-        export BODY
-
-        bash ./notify.sh \
-            -t "Key Vault Scan finished for $KV_NAME" \
-            -l "💣 These Secrets are close to expiry, you should renew them" \
-            -c "#FFA500" \
-            -d "*Key Vault:* $KV_NAME    *Resource Group:* $RESOURCE_GROUP"
-      fi
+      print -l "$BIN_EXPIRING_COUNT Secrets were found that are close to expiry. You should renew these:" -q 0 -e 0
+      print -l "$BIN_EXPIRING_SECRET_NAMES" -q 0 -e 0
     fi
     if [ "$BIN_EXPIRED" != "" ]; then
       BIN_EXPIRED="[${BIN_EXPIRED/%, /}]"
+      BIN_EXPIRED_COUNT=$(echo "$BIN_EXPIRED" | jq -r 'length')
+      BIN_EXPIRED_SECRET_NAMES=$(echo "$BIN_EXPIRED" | jq -rc '.[].secret_name')
+      TOTAL_EXPIRED_COUNT=$((TOTAL_EXPIRED_COUNT + BIN_EXPIRED_COUNT))
 
-      echo
-      echo "💣 Secrets were found that have expired, you should remove them if they are not in use"
-
-      if [ $SILENT == 0 ]; then
-        echo "Key Vault: $KV_NAME"
-        echo "$BIN_EXPIRED" | jq -c '.[].secret_name'
-      fi
-
-      echo
-
-      if [ $NOTIFY == 1 ]; then
-        JSON_SECRETS=$(
-          echo "$BIN_EXPIRED" |
-          jq -r \
-            --arg kvn "${KV_NAME}" \
-            '.[] | [
-              {
-                text: (.secret_name | "<https://portal.azure.com/?feature.msaljs=true#@platform.education.gov.uk/asset/Microsoft_Azure_KeyVault/Secret/https://"+$kvn+".vault.azure.net/secrets/"+.+"|"+.+">"),
-                type: "mrkdwn"
-              },
-              {
-                text: .expiry_date,
-                type: "plain_text"
-              }
-            ]'
-        )
-
-        BODY=$(
-          jq -n \
-            --arg kvn "$KV_NAME" \
-            --arg rg "$RESOURCE_GROUP" \
-            --argjson secrets "$JSON_SECRETS" \
-            '[
-              {
-                text: "*Secret Name*",
-                type: "mrkdwn"
-              },
-              {
-                text: "*Expiry Date*",
-                type: "mrkdwn"
-              }
-            ] | . += $secrets'
-        )
-
-        export BODY
-
-        bash ./notify.sh \
-            -t "Key Vault Scan finished for $KV_NAME" \
-            -l "💣 These Secrets have already expired, you should remove them if they are not in use" \
-            -c "#FF0000" \
-            -d "*Key Vault:* $KV_NAME    *Resource Group:* $RESOURCE_GROUP"
-      fi
+      print -l "$BIN_EXPIRED_COUNT Secrets were found that have expired. You should remove them if they are not in use:" -q 0 -e 0
+      print -l "$BIN_EXPIRED_SECRET_NAMES" -q 0 -e 0
     fi
   fi
 done
 
+LOG_FINAL="Finished scanning $COUNT_KEY_VAULT Key Vaults and $TOTAL_SECRET_COUNT secrets. $TOTAL_EXPIRED_COUNT were expired. $TOTAL_EXPIRING_COUNT were close to expiry."
+
+print -l "$LOG_FINAL" -q 0 -e 0
+
 if [ $NOTIFY == 1 ]; then
-  bash ./notify.sh \
-    -t "Finished"
+  bash ./notify.sh -t "$LOG_FINAL"
 fi
