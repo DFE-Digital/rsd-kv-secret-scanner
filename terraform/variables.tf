@@ -35,3 +35,12 @@ variable "slack_webhook_url" {
   type        = string
   default     = ""
 }
+
+variable "key_vault_targets" {
+  description = "List of Key Vault resource names and resource groups that you want the Scanner to be able to access"
+  type = map(object({
+    name                = string
+    resource_group_name = string
+  }))
+  default = {}
+}
