@@ -17,6 +17,8 @@ locals {
   key_vault_access_ipv4              = var.key_vault_access_ipv4
   tfvars_filename                    = var.tfvars_filename
   slack_webhook_url                  = var.slack_webhook_url
+  api_connection_client_id           = var.api_connection_client_id
+  api_connection_client_secret       = var.api_connection_client_secret
   tags                               = var.tags
   key_vault_targets                  = var.key_vault_targets
 }
