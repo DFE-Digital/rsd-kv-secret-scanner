@@ -44,3 +44,16 @@ variable "key_vault_targets" {
   }))
   default = {}
 }
+
+variable "api_connection_client_id" {
+  description = "Service Principal Client ID used for authenticating with the Container Instance "
+  type        = string
+  default     = ""
+}
+
+variable "api_connection_client_secret" {
+  description = "Service Principal Client Secret used for authenticating with the Container Instance"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
