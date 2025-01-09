@@ -62,7 +62,7 @@ resource "azapi_update_resource" "patch_logs" {
   type        = "Microsoft.ContainerInstance/containerGroups@2023-05-01"
   resource_id = azurerm_container_group.default.id
 
-  body = jsonencode({
+  body = {
     properties = {
       diagnostics : {
         logAnalytics : {
@@ -78,5 +78,5 @@ resource "azapi_update_resource" "patch_logs" {
         }
       ]
     }
-  })
+  }
 }

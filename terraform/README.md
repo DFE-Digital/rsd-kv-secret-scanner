@@ -11,8 +11,8 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_azapi"></a> [azapi](#provider\_azapi) | 1.14.0 |
-| <a name="provider_azurerm"></a> [azurerm](#provider\_azurerm) | 3.113.0 |
+| <a name="provider_azapi"></a> [azapi](#provider\_azapi) | 2.2.0 |
+| <a name="provider_azurerm"></a> [azurerm](#provider\_azurerm) | 4.14.0 |
 
 ## Modules
 
@@ -53,6 +53,10 @@
 |------|-------------|------|---------|:--------:|
 | <a name="input_api_connection_client_id"></a> [api\_connection\_client\_id](#input\_api\_connection\_client\_id) | Service Principal Client ID used for authenticating with the Container Instance | `string` | `""` | no |
 | <a name="input_api_connection_client_secret"></a> [api\_connection\_client\_secret](#input\_api\_connection\_client\_secret) | Service Principal Client Secret used for authenticating with the Container Instance | `string` | `""` | no |
+| <a name="input_azure_client_id"></a> [azure\_client\_id](#input\_azure\_client\_id) | Service Principal Client ID | `string` | n/a | yes |
+| <a name="input_azure_client_secret"></a> [azure\_client\_secret](#input\_azure\_client\_secret) | Service Principal Client Secret | `string` | n/a | yes |
+| <a name="input_azure_subscription_id"></a> [azure\_subscription\_id](#input\_azure\_subscription\_id) | Service Principal Subscription ID | `string` | n/a | yes |
+| <a name="input_azure_tenant_id"></a> [azure\_tenant\_id](#input\_azure\_tenant\_id) | Service Principal Tenant ID | `string` | n/a | yes |
 | <a name="input_environment"></a> [environment](#input\_environment) | Environment name | `string` | n/a | yes |
 | <a name="input_key_vault_access_ipv4"></a> [key\_vault\_access\_ipv4](#input\_key\_vault\_access\_ipv4) | List of IPv4 Addresses that are permitted to access the Key Vault | `list(string)` | n/a | yes |
 | <a name="input_key_vault_targets"></a> [key\_vault\_targets](#input\_key\_vault\_targets) | List of Key Vault resource names and resource groups that you want the Scanner to be able to access | <pre>map(object({<br/>    name                = string<br/>    resource_group_name = string<br/>  }))</pre> | `{}` | no |
